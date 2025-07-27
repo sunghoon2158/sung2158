@@ -356,12 +356,12 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown("""<h1>🧠 군 조직 성향 및 자살 위험 종합 분석</h1>""", unsafe_allow_html=True) # Military Organizational Tendency and Suicide Risk Comprehensive Analysis
+    st.markdown("""<h1>군 적응 성향 및 자살 위험 분석</h1>""", unsafe_allow_html=True) # Military Organizational Tendency and Suicide Risk Comprehensive Analysis
     st.markdown('<p class="subtitle">최신 AI 감정 모델을 활용한 심층 분석 시스템</p>', unsafe_allow_html=True) # In-depth analysis system using the latest AI emotion models
     st.write("---")
 
    
-    tab1, tab2, tab3 = st.tabs(["🎙️ 음성파일(STT)", "📄 텍스트파일", "📝 복사한 대화 분석"])
+    tab1, tab2, tab3 = st.tabs(["🎙️ 음성파일", "📄 텍스트파일", "📝 복사한 대화 분석"])
 
     with tab1:
         st.header("음성 파일 업로드")
