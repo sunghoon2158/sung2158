@@ -2,7 +2,7 @@ import streamlit as st
 from transformers import pipeline
 import re
 import tempfile
-import whisper
+import whisper 
 import torch
 import matplotlib.pyplot as plt
 import os
