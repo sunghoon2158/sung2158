@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 from transformers import pipeline
 import re
 import tempfile
@@ -163,7 +163,7 @@ def generate_report(results: dict, participants: list) -> str:
         participants_str = "알 수 없음"
 
     report = f"""
-# 🧠 두 사의 심리·조직 적응 반석 보고서 (Two Deserts Psychological and Organizational Adaptability Cornerstone Report)
+# 🧠 두 사람의 심리·조직 적응 반석 보고서 (Two Deserts Psychological and Organizational Adaptability Cornerstone Report)
 
 ## 분석 대상: {participants_str}  (Analysis Subject(s))
 
