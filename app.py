@@ -6,6 +6,7 @@ import whisper
 import torch
 import matplotlib.pyplot as plt
 import os
+import shutil
 
 # 한글 폰트 설정 (Windows용 기본 설정)
 def set_korean_font():
@@ -23,7 +24,9 @@ emotion_analyzer = load_emotion_model()
 
 @st.cache_resource(show_spinner=False)
 def load_whisper_model():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # Streamlit 서버 환경에 맞춰 CPU 사용을 명시
+    device = "cpu"
+    # fp16 비활성화 (CPU 환경에서 안정성 향상)
     return whisper.load_model("small", device=device)
 whisper_model = load_whisper_model()
 
@@ -215,17 +218,23 @@ def analyze_texts(texts: list) -> dict:
 
 # Whisper STT
 def transcribe_audio(file_buffer) -> str:
-    tmp_path = None
+    tmp_dir = None
     try:
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
-            tmp_file.write(file_buffer.read())
-            tmp_path = tmp_file.name
+        # Streamlit 서버 환경에 맞춰 안전한 임시 디렉토리 사용
+        tmp_dir = tempfile.mkdtemp()
+        tmp_path = os.path.join(tmp_dir, "uploaded_audio.mp3")
+
+        # 파일 버퍼를 임시 파일로 저장
+        with open(tmp_path, 'wb') as f:
+            f.write(file_buffer.read())
         
+        # Whisper 모델이 파일을 처리할 수 있도록 파일 핸들을 닫은 후 경로를 전달
         result = whisper_model.transcribe(tmp_path, fp16=False)
         return result["text"]
     finally:
-        if tmp_path and os.path.exists(tmp_path):
-            os.remove(tmp_path)
+        # 분석이 성공하든 실패하든 임시 파일 및 디렉토리 삭제
+        if tmp_dir and os.path.exists(tmp_dir):
+            shutil.rmtree(tmp_dir)
 
 # 인증
 def verify_access_code():
@@ -314,6 +323,7 @@ def main():
             justify-content: center;
             gap: 12px;
             margin-bottom: 20px;
+            flex-wrap: wrap; /* 탭이 모바일 화면에서 잘리지 않도록 줄바꿈 허용 */
         }
         .stTabs [data-baseweb="tab"] {
             background-color: #dfe6e9;
@@ -322,6 +332,7 @@ def main():
             font-weight: 600;
             color: #2c3e50;
             transition: background-color 0.3s ease;
+            white-space: nowrap; /* 탭 이름이 줄바꿈되지 않도록 설정 */
         }
         .stTabs [data-baseweb="tab"]:hover {
             background-color: #b0c4de;
@@ -409,7 +420,7 @@ def main():
 
     st.title("🔍 심리 및 조직 적응 분석 AI 리포트")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["  1. 음성파일(STT) → 분석", "2. 텍스트 파일 → 분석", "3. 복사붙여넣기 대화분석", "💡 질문 예시"])
+    tab1, tab2, tab3, tab4 = st.tabs(["1. 음성파일(STT) → 분석", "2. 텍스트 파일 → 분석", "3. 복사붙여넣기 대화분석", "💡 질문 예시"])
 
     with tab1:
         audio_file = st.file_uploader("🔊 음성 파일 업로드 (mp3, wav, m4a)", type=["mp3", "wav", "m4a"], key="audio_uploader")
