@@ -35,16 +35,30 @@ def clean_text(text: str) -> str:
     return text
 
 # 자살 위험 판단
-def detect_suicide_risk_ml(emotion_scores: dict) -> bool:
+def detect_suicide_risk(emotion_scores: dict, conversation_length: int) -> str:
     sadness = emotion_scores.get('sadness', 0)
     fear = emotion_scores.get('fear', 0)
-    return sadness > 0.3 or fear > 0.2
+    
+    if conversation_length < 50:
+        return "정보 부족"
+
+    if sadness > 0.45 or (sadness > 0.3 and fear > 0.3):
+        return "⚠️ 위험 신호 감지"
+    elif sadness > 0.25 or fear > 0.2:
+        return "❗️ 관심 필요"
+    else:
+        return "✅ 위험 신호 없음"
 
 # 조직 적응력 세부 항목
 def detailed_organization_evaluation(emotion_scores: dict) -> dict:
-    discipline = emotion_scores.get('fear', 0)
-    loyalty = emotion_scores.get('joy', 0)
-    stress_resilience = 1 - emotion_scores.get('sadness', 0)
+    discipline_score = emotion_scores.get('neutral', 0) + (1 - emotion_scores.get('anger', 0))
+    loyalty_score = emotion_scores.get('joy', 0) + emotion_scores.get('love', 0)
+    stress_resilience_score = (1 - emotion_scores.get('sadness', 0)) + (1 - emotion_scores.get('fear', 0))
+
+    discipline = min(1, max(0, discipline_score / 2))
+    loyalty = min(1, max(0, loyalty_score / 2))
+    stress_resilience = min(1, max(0, stress_resilience_score / 2))
+
     return {
         "규율성": round(discipline, 2),
         "충성심": round(loyalty, 2),
@@ -52,9 +66,17 @@ def detailed_organization_evaluation(emotion_scores: dict) -> dict:
     }
 
 # 심층 심리 및 성격 보고서 생성 함수
-def generate_detailed_personality_report(emotion_scores: dict, participants: list) -> str:
+def generate_detailed_personality_report(emotion_scores: dict, participants: list, conversation_length: int) -> str:
     participants_str = ", ".join(participants) if participants else "분석 대상자"
     
+    if conversation_length < 50:
+        return f"""
+### ⚠️ 심층 분석 제한
+대화 내용이 너무 짧아(글자수: {conversation_length}자), 심도 있는 심리 분석에 제한이 있습니다.
+제공된 정보만으로는 신뢰성 있는 분석을 하기 어려우므로, 추가적인 대화 내용을 확보해주시면 더 정확한 분석이 가능합니다.
+분석이 가능한 부문에 대해서는 아래와 같이 요약하여 제시합니다.
+"""
+
     joy = emotion_scores.get('joy', 0)
     sadness = emotion_scores.get('sadness', 0)
     anger = emotion_scores.get('anger', 0)
@@ -63,144 +85,94 @@ def generate_detailed_personality_report(emotion_scores: dict, participants: lis
     surprise = emotion_scores.get('surprise', 0)
     disgust = emotion_scores.get('disgust', 0)
     neutral = emotion_scores.get('neutral', 0)
+    
+    dominant_emotion = max(emotion_scores, key=emotion_scores.get)
+    emotion_korean_map = {
+        'joy': '기쁨', 'sadness': '슬픔', 'anger': '분노', 'fear': '두려움',
+        'love': '사랑', 'surprise': '놀람', 'disgust': '혐오', 'neutral': '중립'
+    }
+    
+    conversation_type = "일상적인 대화"
+    if dominant_emotion in ['anger', 'sadness', 'fear']:
+        conversation_type = "갈등 또는 어려움에 대한 대화"
+    elif dominant_emotion in ['joy', 'love']:
+        conversation_type = "긍정적이고 화목한 대화"
 
     report_text = f"""
-# 심층 심리 및 무의식, 성격 분석 보고서
+### 🗣️ 대화 참여자
+- 분석 대상: {participants_str}
+- 대화 내용: 대화에서 전반적으로 **'{emotion_korean_map.get(dominant_emotion)}'** 감정이 가장 두드러지며, 이는 **{conversation_type}**였음을 시사합니다.
 
-분석 대상: {participants_str}
+### 📝 심리 및 무의식 분석
+- **심리 상태**:
+    - **긍정 정서**: 대화에서 기쁨({joy:.2f})과 사랑({love:.2f}) 같은 긍정적 감정이 두드러져, 전반적으로 {'활발하고 긍정적인 성향' if (joy+love) > 0.5 else '내성적이거나 감정 표현에 신중한 경향'}을 보입니다.
+    - **부정 정서**: 슬픔({sadness:.2f})과 두려움({fear:.2f})이 다소 {'높아' if sadness > 0.3 or fear > 0.2 else '낮아'}, {'감정적으로 불안정하거나 스트레스 상황에 놓여 있을 가능성' if sadness > 0.3 or fear > 0.2 else '비교적 안정적인 심리 상태'}로 추정됩니다.
+    - **분노/혐오**: 분노({anger:.2f})나 혐오({disgust:.2f})는 {'낮은 편' if anger < 0.3 and disgust < 0.3 else '주의가 필요한 수준'}으로, {'평소 감정 조절이 잘 되고' if anger < 0.3 and disgust < 0.3 else '내적 갈등이나 불만을 내포하고 있을 수 있습니다.'}를 시사합니다.
+- **무의식적 경향성**:
+    - **관계성**: 대화의 긍정 정서가 높다면, 타인과의 상호작용에서 긍정적 관계를 형성하려는 무의식적 욕구가 강합니다. 반대로 두려움이 높다면 관계에서 오는 불안감이나 회피 경향이 무의식적으로 작용할 수 있습니다.
+    - **자아 방어**: 분노나 혐오가 표출될 경우, 이는 외부 환경으로부터 자신을 보호하려는 무의식적 방어 기제로 해석될 수 있습니다. 감정의 과도한 억제는 스트레스의 무의식적 축적을 의미하기도 합니다.
 
----
-
-본 보고서는 대화 내용을 기반으로 AI 감정 분석 모델의 결과를 활용하여, 대상자의 심리 상태, 무의식적 경향, 그리고 성격의 장단점을 종합적으로 해석한 내용입니다.
-
----
-
-## 1. 심리 상태 분석
-
-- 기쁨과 사랑과 같은 긍정 정서의 정도는 각각 {joy:.2f}, {love:.2f}로 나타났으며, 이는 대상자가 대체로 {'긍정적이고 친화적인 성향을 보임' if (joy+love) > 0.5 else '내향적이거나 조심스러운 성향을 가질 수 있음'}을 의미합니다.
-
-- 슬픔({sadness:.2f})과 두려움({fear:.2f})이 다소 {'높은 편' if sadness > 0.3 or fear > 0.2 else '낮은 편'}으로, 감정적으로 {'불안정하거나 스트레스가 존재할 수 있음' if sadness > 0.3 or fear > 0.2 else '비교적 안정적인 상태임'}을 시사합니다.
-
-- 분노({anger:.2f})와 혐오({disgust:.2f})의 정도는 {'낮아 평온한 상태' if anger < 0.3 and disgust < 0.3 else '다소 긴장이나 갈등의 가능성'}을 내포합니다.
-
-- 놀람({surprise:.2f})과 중립({neutral:.2f}) 감정은 상황에 대한 적응력과 균형을 반영합니다.
-
----
-
-## 2. 무의식적 경향성
-
-대화 분석 결과, 다음과 같은 무의식적 경향이 감지됩니다.
-
-- 두려움 및 슬픔 감정의 상대적 증가는 대인관계에서 불안감이나 회피 경향, 자기보호적인 심리 상태를 내포할 수 있습니다.
-
-- 긍정 정서가 낮은 경우, 내적 갈등이나 자기 인식의 불안정함이 무의식적으로 작용할 가능성이 있습니다.
-
-- 분노 및 혐오 감정이 높을 경우, 무의식적으로 스트레스가 누적되거나 주변 환경과의 갈등 가능성이 존재합니다.
-
----
-
-## 3. 성격의 장점
-
-- 긍정 정서가 적절히 발현되는 경우, 사회적 유대감이 높고 조직 내 협력 및 친화력이 뛰어납니다.
-
-- 스트레스 저항력이 높다면 위기 상황에서도 침착함을 유지할 수 있어 안정적인 역할 수행이 가능합니다.
-
-- 높은 충성심과 규율성은 조직 내 신뢰 형성에 긍정적 영향을 미칩니다.
-
----
-
-## 4. 성격의 단점 및 개선 과제
-
-- 슬픔과 두려움이 과도하게 높은 경우, 우울감과 불안 장애로 발전할 위험이 있어 심리적 지원이 필요합니다.
-
-- 분노나 혐오가 높은 경우, 갈등 관리 및 감정 조절 훈련이 권장됩니다.
-
-- 내성적이고 조심스러운 성향은 대인관계 확장에 제약이 될 수 있으므로 점진적 사회성 훈련이 도움이 됩니다.
-
----
-
-## 결론
-
-{participants_str}은(는) 위와 같은 심리·무의식적 특성과 성격적 장단점을 가지고 있으며, 본 보고서는 객관적 AI 분석에 기반한 해석임을 참고하시기 바랍니다.
-
-심리적 안정과 조직 적응력 강화를 위한 지속적인 관심과 지원이 권장됩니다.
 """
-
     return report_text[:4000]
 
-# 보고서 생성
-def generate_report(results: dict, participants: list) -> str:
-    dominant = results["지배 감정"]
+# 최종 보고서 생성
+def generate_final_report(results: dict, participants: list, cleaned_text: str) -> str:
     emotion_scores = results["감정 비율"]
     org_eval = results["조직 적응력 세분화"]
-    suicide_risk = results["자살 위험 여부"]
-    personality = results["조직 생활 평가"]
+    suicide_risk_status = results["자살 위험 여부"]
 
+    # 군생활 적응도 결론
     adaptation_score = round((org_eval['규율성'] + org_eval['충성심'] + org_eval['스트레스 저항력']) / 3, 2)
-
-    emotion_korean_map = {
-        'joy': '기쁨',
-        'sadness': '슬픔',
-        'anger': '분노',
-        'fear': '두려움',
-        'love': '사랑',
-        'surprise': '놀람',
-        'disgust': '혐오',
-        'neutral': '중립'
-    }
-
-    def emotion_explanation(emotion):
-        if emotion in ['joy', 'love']:
-            return "긍정적 정서 상태를 의미합니다."
-        elif emotion in ['anger', 'fear', 'sadness', 'disgust']:
-            return "부정적 정서 상태 또는 스트레스 상태를 의미할 수 있습니다."
-        else:
-            return "중립적인 감정입니다."
-
-    if participants:
-        participants_str = ", ".join(participants)
+    
+    if adaptation_score > 0.8:
+        adaptation_conclusion = "매우 긍정적: 조직 적응력이 매우 높아 군생활에 큰 어려움이 없을 것으로 예상됩니다."
+    elif adaptation_score > 0.6:
+        adaptation_conclusion = "긍정적: 조직 생활에 잘 적응할 것으로 보이나, 지속적인 관심이 필요합니다."
+    elif adaptation_score > 0.4:
+        adaptation_conclusion = "보통: 심리적 불안정 요소가 일부 보이며, 상황에 따라 적응에 어려움을 겪을 수 있습니다."
     else:
-        participants_str = "알 수 없음"
+        adaptation_conclusion = "주의 필요: 심리적 지원과 세심한 관심이 요구되며, 조직 적응에 어려움이 있을 수 있습니다."
+
+    suicide_risk_reason = ""
+    if suicide_risk_status == "⚠️ 위험 신호 감지":
+        suicide_risk_reason = "대화에서 감지된 '슬픔'과 '두려움' 감정 점수가 매우 높아, 심리적 불안정성이 상당한 수준임을 시사합니다."
+    elif suicide_risk_status == "❗️ 관심 필요":
+        suicide_risk_reason = "대화에서 감지된 '슬픔' 또는 '두려움' 감정 점수가 일정 수준 이상으로 나타나, 심리적 어려움이 있을 수 있음을 시사합니다."
+    else:
+        suicide_risk_reason = "대화 내용에 기반하여 특별한 위험 신호는 감지되지 않았습니다."
 
     report = f"""
-# 🧠 두 사람의 심리·조직 적응 반석 보고서 (Two Deserts Psychological and Organizational Adaptability Cornerstone Report)
-
-## 분석 대상: {participants_str}  (Analysis Subject(s))
-
-## 1. 주요 지배 감정: **{emotion_korean_map.get(dominant.lower(), dominant)} ({dominant})** (Main Dominant Emotion)
-
-- 감정 분포:
-"""
-    for emotion, score in emotion_scores.items():
-        report += f"- {emotion_korean_map.get(emotion.lower(), emotion)} ({emotion}): {score:.3f} ({emotion_explanation(emotion.lower())})\n"
-
-    report += f"""
-
-## 2. 조직 적응력 평가 (Organizational Adaptability Evaluation)
-
-- 규율성: {org_eval['규율성']} (Discipline)
-- 충성심: {org_eval['충성심']} (Loyalty)
-- 스트레스 저항력: {org_eval['스트레스 저항력']} (Stress Resilience)
-
-## 3. 자살 위험 여부: {"⚠️ 위험 검지됨" if suicide_risk else "✅ 위험 신호 없음"} (Suicide Risk: {"⚠️ Risk Detected" if suicide_risk else "✅ No Risk Signal"})
-
-## 4. 조직 생활 종합 평가 (Overall Organizational Life Evaluation)
-
-{personality}
-
-## 5. 군생화 적응도 추정 점수: **{adaptation_score} / 1.0** (Estimated Military Life Adaptability Score)
+# 📄 대화 내용 분석 리포트
 
 ---
 
-"""
+### 1. 자살 위험도 평가
+- **판정 결과**: **{suicide_risk_status}**
+- **근거**: {suicide_risk_reason} 단순 AI 분석이므로 전문가의 추가 상담이 반드시 필요합니다.
 
-    detailed_personality_report = generate_detailed_personality_report(emotion_scores, participants)
-    report += detailed_personality_report + "\n\n"
+---
 
-    report += """---
-🔍 본 보고서는 입력된 텍스트에 기반한 AI 분석 결과이며, 참고용으로 사용하세요. (This report is an AI analysis result based on the input text and should be used for reference.)
+### 2. 조직 적응 능력 평가
+- **규율성**: **{org_eval['규율성']:.2f}** (점수가 높을수록 규칙을 잘 준수하고 차분한 성향을 의미)
+- **충성심**: **{org_eval['충성심']:.2f}** (점수가 높을수록 소속감과 긍정적인 유대감을 의미)
+- **스트레스 저항력**: **{org_eval['스트레스 저항력']:.2f}** (점수가 높을수록 어려움에 대한 심리적 회복력이 높음을 의미)
+- **결론**: 평가 점수를 종합했을 때, 군생활에 대한 심리적 적응도는 **'{adaptation_conclusion}'**으로 판단됩니다.
+
+---
+
+{generate_detailed_personality_report(emotion_scores, participants, len(cleaned_text))}
+
+---
+
+### 📜 분석 관련 근거
+- **법률적 근거**: 본 분석은 비전문가용 참고 자료로, **정식 진단 및 법적 효력을 가지지 않습니다**. 개인정보보호법에 의거, 대상자의 동의 없이 무단으로 정보를 수집하거나 활용하는 것은 법적 제재의 대상이 될 수 있습니다. 모든 활용은 개인정보 보호 원칙을 철저히 준수해야 합니다.
+- **학술적 근거**: 본 분석은 **폴 에크만(Paul Ekman)의 보편적 기본 감정 이론**과 같은 심리학적 모델에 기반한 자연어 처리(NLP) 기술을 활용합니다. AI 모델(DistilRoBERTa 기반)이 텍스트의 문맥과 단어 패턴을 분석하여 감정을 식별하고, 이 데이터를 바탕으로 조직 행동 및 심리 이론에 따라 해석한 내용입니다.
+
+---
+
+🔍 **본 보고서는 입력된 텍스트에 기반한 AI 분석 결과이며, 참고용으로만 사용하십시오.**
 """
-    return report[:4000]
+    return report
 
 # 참여자 이름 추출
 def extract_person_names(text: str) -> list:
@@ -218,37 +190,42 @@ def extract_person_names(text: str) -> list:
 def analyze_texts(texts: list) -> dict:
     combined_text = " ".join(texts)
     cleaned = clean_text(combined_text)
+    
+    if len(cleaned) < 10:
+        return {
+            "감정 비율": {},
+            "지배 감정": "정보 부족",
+            "자살 위험 여부": "정보 부족",
+            "조직 적응력 세분화": {"규율성": 0, "충성심": 0, "스트레스 저항력": 0}
+        }
+
     emotion_results = emotion_analyzer(cleaned, truncation=True, max_length=512)[0]
     emotion_scores = {r['label']: r['score'] for r in emotion_results}
     dominant_emotion = max(emotion_scores, key=emotion_scores.get)
-    suicide_risk = detect_suicide_risk_ml(emotion_scores)
+    suicide_risk = detect_suicide_risk(emotion_scores, len(cleaned))
     org_eval = detailed_organization_evaluation(emotion_scores)
-
-    if dominant_emotion in ['joy', 'love']:
-        personality = "긍정적이고 조직 생활에 잘 적응할 가능성이 높음"
-    elif dominant_emotion in ['anger', 'fear']:
-        personality = "조직 내 갈등이나 불안 요소가 존재할 수 있음"
-    elif dominant_emotion == 'sadness':
-        personality = "우울 성향이 있어 관심이 필요할 수 있음"
-    else:
-        personality = "평균적인 정서 상태로 보임"
-
+    
     return {
         "감정 비율": emotion_scores,
         "지배 감정": dominant_emotion,
-        "조직 생활 평가": personality,
         "자살 위험 여부": suicide_risk,
-        "조직 적응력 세분화": org_eval
+        "조직 적응력 세분화": org_eval,
+        "cleaned_text": cleaned
     }
 
 # Whisper STT
 def transcribe_audio(file_buffer) -> str:
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        tmp_file.write(file_buffer.read())
-        tmp_path = tmp_file.name
-    result = whisper_model.transcribe(tmp_path, fp16=False)
-    os.remove(tmp_path)
-    return result["text"]
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp_file:
+            tmp_file.write(file_buffer.read())
+            tmp_path = tmp_file.name
+        
+        result = whisper_model.transcribe(tmp_path, fp16=False)
+        return result["text"]
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 # 인증
 def verify_access_code():
@@ -284,7 +261,7 @@ def verify_access_code():
 def main():
     if not verify_access_code():
         return
-
+    
     st.markdown("""
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;700&display=swap');
@@ -294,6 +271,7 @@ def main():
             color: #222222;
             margin: 0;
             padding: 0;
+            font-size: 0.95rem;
         }
         .stApp {
             max-width: 760px;
@@ -361,7 +339,7 @@ def main():
             display: block;
         }
         .stTextArea textarea {
-            font-size: 1.05rem !important;
+            font-size: 0.95rem !important;
             min-height: 180px !important;
             line-height: 1.5 !important;
             padding: 12px !important;
@@ -377,7 +355,7 @@ def main():
             padding: 14px 30px;
             border-radius: 30px;
             border: none;
-            font-size: 1.15rem;
+            font-size: 1.1rem;
             cursor: pointer;
             transition: background-color 0.3s ease;
             width: 100%;
@@ -396,7 +374,7 @@ def main():
             border: 1.5px solid #d0d7de;
             border-radius: 18px;
             padding: 25px 30px;
-            font-size: 1rem;
+            font-size: 0.95rem;
             color: #333333;
             line-height: 1.7;
             white-space: pre-wrap;
@@ -405,21 +383,14 @@ def main():
             overflow-x: auto;
             font-family: 'Noto Sans KR', sans-serif;
         }
-        /* 모바일 대응 */
         @media (max-width: 480px) {
             .stApp {
                 margin: 10px 10px 30px 10px;
                 padding: 15px 15px 30px 15px;
             }
-            h1 {
-                font-size: 2rem;
-            }
-            h2 {
-                font-size: 1.3rem;
-            }
-            h3 {
-                font-size: 1.1rem;
-            }
+            h1 { font-size: 2rem; }
+            h2 { font-size: 1.3rem; }
+            h3 { font-size: 1.1rem; }
             .stButton > button {
                 font-size: 1rem;
                 max-width: 100%;
@@ -427,7 +398,10 @@ def main():
             }
             .stTextArea textarea {
                 min-height: 150px !important;
-                font-size: 1rem !important;
+                font-size: 0.9rem !important;
+            }
+            .report {
+                font-size: 0.9rem;
             }
         }
     </style>
@@ -435,48 +409,99 @@ def main():
 
     st.title("🔍 심리 및 조직 적응 분석 AI 리포트")
 
-    tabs = st.tabs(["1. 음성파일(STT) → 분석", "2. 텍스트 파일 → 분석", "3. 복사붙여넣기 대화분석"])
+    tab1, tab2, tab3, tab4 = st.tabs(["  1. 음성파일(STT) → 분석", "2. 텍스트 파일 → 분석", "3. 복사붙여넣기 대화분석", "💡 질문 예시"])
 
-    with tabs[0]:
+    with tab1:
         audio_file = st.file_uploader("🔊 음성 파일 업로드 (mp3, wav, m4a)", type=["mp3", "wav", "m4a"], key="audio_uploader")
         if audio_file:
             st.audio(audio_file)
             if st.button("📝 음성 → 텍스트 변환 및 분석"):
-                with st.spinner("음성 인식 중..."):
+                with st.spinner("음성 인식 중... (파일 크기에 따라 수 분이 소요될 수 있습니다)"):
                     transcript = transcribe_audio(audio_file)
                 st.text_area("🎤 변환된 텍스트", transcript, height=200)
                 participants = extract_person_names(transcript)
                 with st.spinner("감정 분석 및 보고서 생성 중..."):
                     results = analyze_texts([transcript])
-                    report = generate_report(results, participants)
+                    if 'cleaned_text' in results:
+                        report = generate_final_report(results, participants, results['cleaned_text'])
+                    else:
+                        report = "대화 내용이 너무 짧아 분석이 불가능합니다."
                 st.markdown("### 📄 분석 결과 보고서")
                 st.markdown(f'<div class="report">{report}</div>', unsafe_allow_html=True)
 
-    with tabs[1]:
+    with tab2:
         text_file = st.file_uploader("📄 텍스트 파일 업로드 (.txt)", type=["txt"], key="textfile_uploader")
         if text_file:
-            content = text_file.read().decode('utf-8')
+            try:
+                content = text_file.read().decode('utf-8')
+            except UnicodeDecodeError:
+                text_file.seek(0)
+                content = text_file.read().decode('cp949', errors='ignore')
+            
             st.text_area("📜 텍스트 내용", content, height=200)
             participants = extract_person_names(content)
             if st.button("🔍 텍스트 분석 시작"):
                 with st.spinner("감정 분석 중..."):
                     results = analyze_texts([content])
-                    report = generate_report(results, participants)
+                    if 'cleaned_text' in results:
+                        report = generate_final_report(results, participants, results['cleaned_text'])
+                    else:
+                        report = "대화 내용이 너무 짧아 분석이 불가능합니다."
                 st.markdown("### 📄 분석 결과 보고서")
                 st.markdown(f'<div class="report">{report}</div>', unsafe_allow_html=True)
 
-    with tabs[2]:
+    with tab3:
         input_text = st.text_area("💬 대화 내용 복사-붙여넣기", height=300)
-        participants = extract_person_names(input_text)
+        
         if st.button("분석 시작", key="paste_analysis"):
             if not input_text.strip():
                 st.warning("텍스트를 입력해주세요.")
             else:
+                participants = extract_person_names(input_text)
                 with st.spinner("감정 분석 중..."):
                     results = analyze_texts([input_text])
-                    report = generate_report(results, participants)
+                    if 'cleaned_text' in results:
+                        report = generate_final_report(results, participants, results['cleaned_text'])
+                    else:
+                        report = "대화 내용이 너무 짧아 분석이 불가능합니다."
                 st.markdown("### 📄 분석 결과 보고서")
                 st.markdown(f'<div class="report">{report}</div>', unsafe_allow_html=True)
+                
+    with tab4:
+        st.header("💡 심리 및 조직 적응 분석을 위한 질문 예시")
+        st.markdown("""
+        이 질문들은 대상자의 심리 상태, 가치관, 조직 적응력을 자연스럽게 파악하는 데 도움이 될 수 있는 예시입니다. 상황과 대상에 맞게 변형하여 활용하세요.
+        """)
+
+        st.subheader("1. 아이스브레이킹 및 일상 질문 (Rapport 형성)")
+        st.info("""
+        - 요즘 가장 즐거운 일이나 관심사가 있나요?
+        - 주말이나 쉬는 날에는 보통 무엇을 하며 시간을 보내나요?
+        - 최근에 재미있게 본 영화나 드라마가 있다면 어떤 점이 좋았나요?
+        """)
+
+        st.subheader("2. 성격 및 가치관 파악 질문")
+        st.info("""
+        - 스스로 생각하기에 자신의 가장 큰 장점과 단점은 무엇이라고 생각하나요?
+        - 살면서 가장 중요하게 생각하는 가치(예: 정직, 성실, 성장, 안정 등)는 무엇인가요?
+        - 어떤 사람과 함께 일할 때 가장 편안하고, 또 어떤 사람과 일하는 것이 힘든가요?
+        - 예상치 못한 문제가 발생했을 때, 보통 어떻게 대처하는 편인가요?
+        """)
+        
+        st.subheader("3. 스트레스 및 조직 적응력 관련 질문")
+        st.info("""
+        - 스트레스를 받을 때 주로 어떤 방식으로 해소하나요?
+        - 단체 생활이나 조직 문화에서 가장 중요하다고 생각하는 점은 무엇인가요?
+        - 선임이나 동료와 의견 충돌이 있었던 경험이 있나요? 있었다면 어떻게 해결했나요?
+        - 힘들거나 어려운 일이 있을 때 주변에 도움을 요청하는 편인가요, 아니면 혼자 해결하려고 하나요?
+        """)
+
+        st.subheader("4. 대인관계 및 사회성 질문")
+        st.info("""
+        - 새로운 환경이나 낯선 사람들과 만나는 것에 대해 어떻게 느끼나요?
+        - 주변 친구나 동료들은 자신을 어떤 사람이라고 평가하는 것 같나요?
+        - 다른 사람의 부탁을 거절해야 할 때, 솔직하게 이야기하는 편인가요?
+        """)
 
 if __name__ == "__main__":
     main()
