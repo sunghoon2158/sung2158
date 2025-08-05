@@ -24,8 +24,7 @@ emotion_analyzer = load_emotion_model()
 
 @st.cache_resource(show_spinner=False)
 def load_whisper_model():
-    # Streamlit 서버 환경에 맞춰 CPU 사용을 명시
-    device = "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     # fp16 비활성화 (CPU 환경에서 안정성 향상)
     return whisper.load_model("small", device=device)
 whisper_model = load_whisper_model()
@@ -220,19 +219,15 @@ def analyze_texts(texts: list) -> dict:
 def transcribe_audio(file_buffer) -> str:
     tmp_dir = None
     try:
-        # Streamlit 서버 환경에 맞춰 안전한 임시 디렉토리 사용
         tmp_dir = tempfile.mkdtemp()
         tmp_path = os.path.join(tmp_dir, "uploaded_audio.mp3")
 
-        # 파일 버퍼를 임시 파일로 저장
         with open(tmp_path, 'wb') as f:
-            f.write(file_buffer.read())
+            f.write(file_buffer.getvalue())  # getvalue()를 사용해 파일 버퍼의 내용을 읽음
         
-        # Whisper 모델이 파일을 처리할 수 있도록 파일 핸들을 닫은 후 경로를 전달
         result = whisper_model.transcribe(tmp_path, fp16=False)
         return result["text"]
     finally:
-        # 분석이 성공하든 실패하든 임시 파일 및 디렉토리 삭제
         if tmp_dir and os.path.exists(tmp_dir):
             shutil.rmtree(tmp_dir)
 
@@ -323,7 +318,7 @@ def main():
             justify-content: center;
             gap: 12px;
             margin-bottom: 20px;
-            flex-wrap: wrap; /* 탭이 모바일 화면에서 잘리지 않도록 줄바꿈 허용 */
+            flex-wrap: wrap;
         }
         .stTabs [data-baseweb="tab"] {
             background-color: #dfe6e9;
@@ -332,7 +327,7 @@ def main():
             font-weight: 600;
             color: #2c3e50;
             transition: background-color 0.3s ease;
-            white-space: nowrap; /* 탭 이름이 줄바꿈되지 않도록 설정 */
+            white-space: nowrap;
         }
         .stTabs [data-baseweb="tab"]:hover {
             background-color: #b0c4de;
@@ -423,35 +418,42 @@ def main():
     tab1, tab2, tab3, tab4 = st.tabs(["1. 음성파일(STT) → 분석", "2. 텍스트 파일 → 분석", "3. 복사붙여넣기 대화분석", "💡 질문 예시"])
 
     with tab1:
+        st.subheader("음성 파일 업로드 및 분석")
         audio_file = st.file_uploader("🔊 음성 파일 업로드 (mp3, wav, m4a)", type=["mp3", "wav", "m4a"], key="audio_uploader")
         if audio_file:
             st.audio(audio_file)
-            if st.button("📝 음성 → 텍스트 변환 및 분석"):
+            if st.button("📝 음성 → 텍스트 변환 및 분석", key="audio_analysis"):
                 with st.spinner("음성 인식 중... (파일 크기에 따라 수 분이 소요될 수 있습니다)"):
-                    transcript = transcribe_audio(audio_file)
-                st.text_area("🎤 변환된 텍스트", transcript, height=200)
-                participants = extract_person_names(transcript)
-                with st.spinner("감정 분석 및 보고서 생성 중..."):
-                    results = analyze_texts([transcript])
-                    if 'cleaned_text' in results:
-                        report = generate_final_report(results, participants, results['cleaned_text'])
-                    else:
-                        report = "대화 내용이 너무 짧아 분석이 불가능합니다."
-                st.markdown("### 📄 분석 결과 보고서")
-                st.markdown(f'<div class="report">{report}</div>', unsafe_allow_html=True)
+                    try:
+                        transcript = transcribe_audio(audio_file)
+                        st.text_area("🎤 변환된 텍스트", transcript, height=200)
+                        participants = extract_person_names(transcript)
+                        
+                        with st.spinner("감정 분석 및 보고서 생성 중..."):
+                            results = analyze_texts([transcript])
+                            if 'cleaned_text' in results:
+                                report = generate_final_report(results, participants, results['cleaned_text'])
+                            else:
+                                report = "대화 내용이 너무 짧아 분석이 불가능합니다."
+                        st.markdown("### 📄 분석 결과 보고서")
+                        st.markdown(f'<div class="report">{report}</div>', unsafe_allow_html=True)
+
+                    except Exception as e:
+                        st.error(f"음성 파일 처리 중 오류가 발생했습니다: {e}")
 
     with tab2:
+        st.subheader("텍스트 파일 업로드 및 분석")
         text_file = st.file_uploader("📄 텍스트 파일 업로드 (.txt)", type=["txt"], key="textfile_uploader")
         if text_file:
-            try:
-                content = text_file.read().decode('utf-8')
-            except UnicodeDecodeError:
-                text_file.seek(0)
-                content = text_file.read().decode('cp949', errors='ignore')
-            
-            st.text_area("📜 텍스트 내용", content, height=200)
-            participants = extract_person_names(content)
-            if st.button("🔍 텍스트 분석 시작"):
+            if st.button("🔍 텍스트 분석 시작", key="text_analysis"):
+                try:
+                    content = text_file.read().decode('utf-8')
+                except UnicodeDecodeError:
+                    text_file.seek(0)
+                    content = text_file.read().decode('cp949', errors='ignore')
+                
+                st.text_area("📜 텍스트 내용", content, height=200)
+                participants = extract_person_names(content)
                 with st.spinner("감정 분석 중..."):
                     results = analyze_texts([content])
                     if 'cleaned_text' in results:
@@ -462,6 +464,7 @@ def main():
                 st.markdown(f'<div class="report">{report}</div>', unsafe_allow_html=True)
 
     with tab3:
+        st.subheader("대화 내용 복사-붙여넣기 분석")
         input_text = st.text_area("💬 대화 내용 복사-붙여넣기", height=300)
         
         if st.button("분석 시작", key="paste_analysis"):
